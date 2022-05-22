@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,17 +21,71 @@ type Response struct {
 	Message string `json:"message"`
 }
 
+type Item struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+}
+
+type ItemSlice struct {
+	Items []Item `json:"items"`
+}
+
 func root(c echo.Context) error {
 	res := Response{Message: "Hello, world!"}
 	return c.JSON(http.StatusOK, res)
+
+}
+
+func getItem(c echo.Context) error {
+	var itemSlice ItemSlice
+
+	fp, err := os.ReadFile("./sample.json")
+	if err != nil {
+		//log.Println("ReadError: ", err)
+		fmt.Println("ReadError: ", err)
+		return err
+	}
+
+	err = json.Unmarshal(fp, &itemSlice)
+	if err != nil {
+		fmt.Println(err)
+		return c.JSON(http.StatusNotFound, err)
+	}
+	return c.JSON(http.StatusOK, itemSlice)
 }
 
 func addItem(c echo.Context) error {
+	var itemSlice ItemSlice
+	// todo: ファイルの存在確認
+	fp, err := os.ReadFile("./sample.json")
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	err = json.Unmarshal(fp, &itemSlice)
+	if err != nil {
+		fmt.Println(err)
+		return c.JSON(http.StatusNotFound, err)
+	}
+
 	// Get form data
 	name := c.FormValue("name")
-	c.Logger().Infof("Receive item: %s", name)
+	category := c.FormValue("category")
+	item := Item{name, category}
+	// add item to slice
+	itemSlice.Items = append(itemSlice.Items, item)
 
-	message := fmt.Sprintf("item received: %s", name)
+	// save as json
+	f, err := os.Create("sample.json")
+	if err != nil {
+		return err
+	}
+	err = json.NewEncoder(f).Encode(itemSlice)
+	if err != nil {
+		return err
+	}
+	c.Logger().Infof("Receive item: %s %s", item.Name, item.Category)
+	message := fmt.Sprintf("item received: %s", item.Name)
 	res := Response{Message: message}
 
 	return c.JSON(http.StatusOK, res)
@@ -70,6 +125,7 @@ func main() {
 
 	// Routes
 	e.GET("/", root)
+	e.GET("/items", getItem)
 	e.POST("/items", addItem)
 	e.GET("/image/:itemImg", getImg)
 
